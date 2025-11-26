@@ -10,8 +10,9 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import java.util.List;
 
 /**
- * Global CORS config that will be used by Spring MVC and Spring Security.
- * Allowed origins can be set via FRONTEND_URL env var (fall back to localhost for dev).
+ * Debug-friendly CORS config.
+ * - Uses allowedOriginPatterns to be tolerant in dev.
+ * - Logs the configured frontend url to spring startup logs.
  */
 @Configuration
 public class CorsConfig {
@@ -21,14 +22,17 @@ public class CorsConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        System.out.println("CorsConfig: frontend.url = " + frontendUrl);
+
         CorsConfiguration config = new CorsConfiguration();
 
-        // Allow the configured frontend origin(s). You can supply a comma-separated list if needed.
-        config.setAllowedOrigins(List.of(frontendUrl));
+        // Use allowedOriginPatterns to handle variety of dev hostnames.
+        // For production lock this to exact origins (don't use "*").
+        config.setAllowedOriginPatterns(List.of(frontendUrl, "*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Authorization", "Set-Cookie")); // if you expose headers
-        config.setAllowCredentials(true); // allow cookies/credentials
+        config.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
+        config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

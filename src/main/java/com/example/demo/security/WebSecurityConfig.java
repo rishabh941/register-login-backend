@@ -54,7 +54,6 @@ public class WebSecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // Enable CORS support (will use the CorsConfigurationSource bean we defined)
             .cors().and()
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -67,5 +66,6 @@ public class WebSecurityConfig {
 
         return http.build();
     }
+
 
 }

@@ -19,7 +19,7 @@ public class AuthController {
     private final UserService userService;
     private final BCryptPasswordEncoder passwordEncoder;
 
-    // Configure cookie security behavior with an env variable (default true in prod)
+    // Cookie security behavior configurable via env (default true in prod)
     @Value("${app.cookie.secure:true}")
     private boolean cookieSecure;
 
@@ -43,27 +43,26 @@ public class AuthController {
             String jwt = userService.login(loginRequest);
             User user = userService.getUserByEmail(loginRequest.getEmail());
 
+            // Create HttpOnly cookie (server-managed session)
             Cookie jwtCookie = new Cookie("jwtToken", jwt);
             jwtCookie.setHttpOnly(true);
-            jwtCookie.setSecure(cookieSecure);  // true in production; false allowed in dev
+            jwtCookie.setSecure(cookieSecure); // true in production; false allowed in dev
             jwtCookie.setPath("/");
-            jwtCookie.setMaxAge(86400);  // 24 hours
-
+            jwtCookie.setMaxAge(86400); // 24 hours
             if (cookieDomain != null && !cookieDomain.isBlank()) {
                 jwtCookie.setDomain(cookieDomain);
             }
-
-            // IMPORTANT: SameSite attribute via response header (Servlet API lacks direct setter in older versions)
             response.addCookie(jwtCookie);
-            // set SameSite explicitly (Render/modern browsers prefer Lax or None if cross-site)
-            // If cookieSecure == true and you need cross-site, use SameSite=None; Secure must be true then
+
+            // Also add explicit Set-Cookie header (robustness across servlet impls)
             String sameSite = cookieSecure ? "None" : "Lax";
+            String domainPart = (cookieDomain != null && !cookieDomain.isBlank()) ? "; Domain=" + cookieDomain : "";
             response.setHeader("Set-Cookie",
                     String.format("jwtToken=%s; HttpOnly; Path=/; Max-Age=86400; Secure=%s; SameSite=%s%s",
                             jwt,
                             cookieSecure ? "true" : "false",
                             sameSite,
-                            (cookieDomain != null && !cookieDomain.isBlank()) ? "; Domain=" + cookieDomain : ""
+                            domainPart
                     )
             );
 
@@ -71,5 +70,36 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
         }
+    }
+
+    /**
+     * Logout endpoint - clears the HttpOnly cookie by sending a deletion Set-Cookie.
+     * Frontend MUST call with credentials: 'include' to allow browser to send cookie and accept deletion header.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<MessageResponse> logout(HttpServletResponse response) {
+        // Build deletion cookie (same name, path, domain; Max-Age=0)
+        Cookie cookie = new Cookie("jwtToken", "");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(cookieSecure);
+        cookie.setPath("/");
+        cookie.setMaxAge(0); // delete immediately
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            cookie.setDomain(cookieDomain);
+        }
+        response.addCookie(cookie);
+
+        // Explicit header as well
+        String sameSite = cookieSecure ? "None" : "Lax";
+        String domainPart = (cookieDomain != null && !cookieDomain.isBlank()) ? "; Domain=" + cookieDomain : "";
+        response.setHeader("Set-Cookie",
+                String.format("jwtToken=; HttpOnly; Path=/; Max-Age=0; Secure=%s; SameSite=%s%s",
+                        cookieSecure ? "true" : "false",
+                        sameSite,
+                        domainPart
+                )
+        );
+
+        return ResponseEntity.ok(new MessageResponse("Logged out"));
     }
 }

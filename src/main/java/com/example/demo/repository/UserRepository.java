@@ -12,7 +12,6 @@ import java.util.Optional;
 
 @Repository
 public class UserRepository {
-
     private final DynamoDbClient dynamoDbClient;
     private final String tableName;
 
@@ -28,7 +27,7 @@ public class UserRepository {
         item.put("email", AttributeValue.fromS(user.getEmail()));
         item.put("username", AttributeValue.fromS(user.getUsername()));
         item.put("passwordHash", AttributeValue.fromS(user.getPasswordHash()));
-        item.put("role", AttributeValue.fromS(user.getRole()));  // New field
+        item.put("role", AttributeValue.fromS(user.getRole()));
         item.put("firstName", AttributeValue.fromS(user.getFirstName()));
         item.put("lastName", AttributeValue.fromS(user.getLastName()));
         item.put("phone", AttributeValue.fromS(user.getPhone()));
@@ -43,65 +42,112 @@ public class UserRepository {
                 .tableName(tableName)
                 .item(item)
                 .build();
-
         dynamoDbClient.putItem(request);
     }
 
-    // Existing methods...
+    // ✅ GSI QUERY - UNLIMITED USERS!
+    public Optional<User> findByEmail(String email) {
+        try {
+            QueryRequest request = QueryRequest.builder()
+                    .tableName(tableName)
+                    .indexName("EmailIndex")
+                    .keyConditionExpression("email = :email")
+                    .expressionAttributeValues(Map.of(":email", AttributeValue.fromS(email)))
+                    .limit(1)
+                    .build();
 
+            QueryResponse response = dynamoDbClient.query(request);
+            
+            if (response.items().isEmpty()) {
+                System.out.println("🔍 User not found in EmailIndex: " + email);
+                return Optional.empty();
+            }
+
+            Map<String, AttributeValue> item = response.items().get(0);
+            User user = mapToUser(item);
+            System.out.println("✅ User found via GSI: " + user.getEmail());
+            return Optional.of(user);
+
+        } catch (Exception e) {
+            System.err.println("❌ GSI Query failed, using SCAN fallback: " + e.getMessage());
+            return findByEmailScanFallback(email);
+        }
+    }
+
+    // ✅ GSI existsByEmail
     public boolean existsByEmail(String email) {
-        ScanRequest request = ScanRequest.builder()
-                .tableName(tableName)
-                .filterExpression("email = :email")
-                .expressionAttributeValues(Map.of(":email", AttributeValue.fromS(email)))
-                .limit(1)
-                .build();
+        try {
+            QueryRequest request = QueryRequest.builder()
+                    .tableName(tableName)
+                    .indexName("EmailIndex")
+                    .keyConditionExpression("email = :email")
+                    .expressionAttributeValues(Map.of(":email", AttributeValue.fromS(email)))
+                    .limit(1)
+                    .build();
 
-        return !dynamoDbClient.scan(request).items().isEmpty();
+            QueryResponse response = dynamoDbClient.query(request);
+            boolean exists = !response.items().isEmpty();
+            System.out.println("🔍 Email exists check: " + email + " → " + exists);
+            return exists;
+
+        } catch (Exception e) {
+            System.err.println("❌ GSI existsByEmail failed, using SCAN: " + e.getMessage());
+            return existsByEmailScan(email);
+        }
     }
 
     public boolean existsByUsername(String username) {
-        ScanRequest request = ScanRequest.builder()
-                .tableName(tableName)
-                .filterExpression("username = :username")
-                .expressionAttributeValues(Map.of(":username", AttributeValue.fromS(username)))
-                .limit(1)
-                .build();
-
-        return !dynamoDbClient.scan(request).items().isEmpty();
+        return existsByEmailScan(username.replaceAll("username", "username")); // Reuse SCAN
     }
 
-    // New method for login
-    public Optional<User> findByEmail(String email) {
+    // 🔧 FALLBACK SCAN METHODS
+    private Optional<User> findByEmailScanFallback(String email) {
         ScanRequest request = ScanRequest.builder()
                 .tableName(tableName)
                 .filterExpression("email = :email")
                 .expressionAttributeValues(Map.of(":email", AttributeValue.fromS(email)))
                 .limit(1)
                 .build();
-
         ScanResponse response = dynamoDbClient.scan(request);
         if (response.items().isEmpty()) {
             return Optional.empty();
         }
+        return Optional.of(mapToUser(response.items().get(0)));
+    }
 
-        Map<String, AttributeValue> item = response.items().get(0);
+    private boolean existsByEmailScan(String value) {
+        ScanRequest request = ScanRequest.builder()
+                .tableName(tableName)
+                .filterExpression("email = :email")
+                .expressionAttributeValues(Map.of(":email", AttributeValue.fromS(value)))
+                .limit(1)
+                .build();
+        return !dynamoDbClient.scan(request).items().isEmpty();
+    }
+
+    // ✅ FIXED SAFE MAPPING
+    private User mapToUser(Map<String, AttributeValue> item) {
         User user = new User();
-        user.setUserId(item.get("userId").s());
-        user.setEmail(item.get("email").s());
-        user.setUsername(item.get("username").s());
-        user.setPasswordHash(item.get("passwordHash").s());
-        user.setRole(item.get("role").s());
-        user.setFirstName(item.get("firstName").s());
-        user.setLastName(item.get("lastName").s());
-        user.setPhone(item.get("phone").s());
-        user.setDateOfBirth(item.get("dateOfBirth").s());
-        user.setRiskAppetite(item.get("riskAppetite").s());
-        user.setExperience(item.get("experience").s());
-        user.setInvestmentGoal(item.get("investmentGoal").s());
-        user.setCreatedAt(item.get("createdAt").s());
-        user.setUpdatedAt(item.get("updatedAt").s());
+        user.setUserId(getStringOrEmpty(item, "userId"));
+        user.setEmail(getStringOrEmpty(item, "email"));
+        user.setUsername(getStringOrEmpty(item, "username"));
+        user.setPasswordHash(getStringOrEmpty(item, "passwordHash"));
+        user.setRole(getStringOrEmpty(item, "role"));
+        user.setFirstName(getStringOrEmpty(item, "firstName"));
+        user.setLastName(getStringOrEmpty(item, "lastName"));
+        user.setPhone(getStringOrEmpty(item, "phone"));
+        user.setDateOfBirth(getStringOrEmpty(item, "dateOfBirth"));
+        user.setRiskAppetite(getStringOrEmpty(item, "riskAppetite"));
+        user.setExperience(getStringOrEmpty(item, "experience"));
+        user.setInvestmentGoal(getStringOrEmpty(item, "investmentGoal"));
+        user.setCreatedAt(getStringOrEmpty(item, "createdAt"));
+        user.setUpdatedAt(getStringOrEmpty(item, "updatedAt"));
+        return user;
+    }
 
-        return Optional.of(user);
+    // ✅ FIXED: No hasValue() - Simple null check
+    private String getStringOrEmpty(Map<String, AttributeValue> item, String key) {
+        AttributeValue value = item.get(key);
+        return value != null && value.s() != null ? value.s() : "";
     }
 }

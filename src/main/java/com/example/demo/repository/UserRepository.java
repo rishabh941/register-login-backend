@@ -37,6 +37,8 @@ public class UserRepository {
         item.put("investmentGoal", AttributeValue.fromS(user.getInvestmentGoal()));
         item.put("createdAt", AttributeValue.fromS(user.getCreatedAt()));
         item.put("updatedAt", AttributeValue.fromS(user.getUpdatedAt()));
+        item.put("otp", AttributeValue.fromS(user.getOtp() == null ? "" : user.getOtp()));
+        item.put("otpExpiry", AttributeValue.fromS(user.getOtpExpiry() == null ? "" : user.getOtpExpiry()));
 
         PutItemRequest request = PutItemRequest.builder()
                 .tableName(tableName)
@@ -142,6 +144,8 @@ public class UserRepository {
         user.setInvestmentGoal(getStringOrEmpty(item, "investmentGoal"));
         user.setCreatedAt(getStringOrEmpty(item, "createdAt"));
         user.setUpdatedAt(getStringOrEmpty(item, "updatedAt"));
+        user.setOtp(getStringOrEmpty(item, "otp"));
+        user.setOtpExpiry(getStringOrEmpty(item, "otpExpiry"));
         return user;
     }
 

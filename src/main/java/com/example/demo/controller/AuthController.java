@@ -103,4 +103,36 @@ public class AuthController {
 
         return ResponseEntity.ok(new MessageResponse("Logged out"));
     }
+
+    // ---------- OTP PASSWORD RESET ----------
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<MessageResponse> forgotPassword(@RequestBody java.util.Map<String, String> body) {
+        try {
+            String email = body.get("email");
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Email required"));
+            }
+            String msg = userService.forgotPassword(email);
+            return ResponseEntity.ok(new MessageResponse(msg));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<MessageResponse> resetPassword(@RequestBody java.util.Map<String, String> body) {
+        try {
+            String email = body.get("email");
+            String otp = body.get("otp");
+            String newPassword = body.get("newPassword");
+            if (email == null || otp == null || newPassword == null || email.isBlank() || otp.isBlank() || newPassword.isBlank()) {
+                return ResponseEntity.badRequest().body(new MessageResponse("email, otp, newPassword are required"));
+            }
+            String msg = userService.resetPassword(email, otp, newPassword);
+            return ResponseEntity.ok(new MessageResponse(msg));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse(e.getMessage()));
+        }
+    }
 }

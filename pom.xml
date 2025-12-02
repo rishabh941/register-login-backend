@@ -62,6 +62,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Email via JavaMailSender -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- JJWT Full Stack (Explicit Versions - No BOM to Avoid Artifact Conflicts) -->
 <!-- JJWT - FORCE COMPILE SCOPE TO FIX parserBuilder() RED LINE -->
 <!-- JJWT -->

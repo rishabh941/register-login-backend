@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.security.SecureRandom;
 import java.util.UUID;
 
 @Service
@@ -22,13 +23,15 @@ public class UserService {
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtUtils jwtUtils;
+    private final EmailService emailService;
 
     private static final DateTimeFormatter ISO_FORMATTER =
             DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC);
 
-    public UserService(UserRepository userRepository, JwtUtils jwtUtils) {
+    public UserService(UserRepository userRepository, JwtUtils jwtUtils, EmailService emailService) {
         this.userRepository = userRepository;
         this.jwtUtils = jwtUtils;
+        this.emailService = emailService;
     }
 
     // Add to UserService class
@@ -92,5 +95,56 @@ public class UserService {
         
         // ✅ RETURN COMPLETE JwtResponse WITH userId
         return new JwtResponse(jwt, user.getEmail(), user.getRole(), user.getUserId());
+    }
+
+    // ---------------- OTP PASSWORD RESET ----------------
+
+    public String forgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String otp = generateOtp();
+        String expiry = ISO_FORMATTER.format(Instant.now().plusSeconds(10 * 60)); // 10 minutes
+        user.setOtp(otp);
+        user.setOtpExpiry(expiry);
+        user.setUpdatedAt(ISO_FORMATTER.format(Instant.now()));
+        userRepository.save(user);
+
+        // Send email via SMTP
+        emailService.sendOtp(email, otp);
+
+        return "OTP sent to email!";
+    }
+
+    public String resetPassword(String email, String otp, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getOtp() == null || user.getOtp().isBlank()) {
+            throw new RuntimeException("No OTP requested");
+        }
+        if (!user.getOtp().equals(otp)) {
+            throw new RuntimeException("Invalid OTP");
+        }
+        if (user.getOtpExpiry() == null || user.getOtpExpiry().isBlank()) {
+            throw new RuntimeException("OTP expired");
+        }
+        Instant expiryInstant = Instant.parse(user.getOtpExpiry());
+        if (Instant.now().isAfter(expiryInstant)) {
+            throw new RuntimeException("OTP expired");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setOtp("");
+        user.setOtpExpiry("");
+        user.setUpdatedAt(ISO_FORMATTER.format(Instant.now()));
+        userRepository.save(user);
+        return "Password changed successfully!";
+    }
+
+    private String generateOtp() {
+        SecureRandom random = new SecureRandom();
+        int value = random.nextInt(900000) + 100000; // ensures 100000-999999
+        return String.valueOf(value);
     }
 }

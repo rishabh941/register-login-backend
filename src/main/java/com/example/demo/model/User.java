@@ -19,6 +19,10 @@ public class User {
     private String createdAt;
     private String updatedAt;
 
+    // OTP password reset (simple flow)
+    private String otp;          // 6-digit code
+    private String otpExpiry;    // ISO-8601 instant string
+
     // ---- Getters & Setters (NO Lombok) ----
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
@@ -61,4 +65,10 @@ public class User {
 
     public String getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getOtp() { return otp; }
+    public void setOtp(String otp) { this.otp = otp; }
+
+    public String getOtpExpiry() { return otpExpiry; }
+    public void setOtpExpiry(String otpExpiry) { this.otpExpiry = otpExpiry; }
 }
